@@ -49,8 +49,8 @@ class ModuleInterface:
     def custom_url_parse(self, url):
         url_parsed = urlparse(url)
         
-        queries = {j:k for j,k in [i.split('=') for i in url_parsed.query.lower().split('&')]}
-        if 'id' in queries:
+        parameters = {j:k for j,k in [i.split('=') for i in url_parsed.query.lower().split('&')]} if url_parsed.query else {}
+        if 'id' in parameters:
             item_types = {
                 'alb': DownloadTypeEnum.album,
                 'tra': DownloadTypeEnum.track,
@@ -58,7 +58,7 @@ class ModuleInterface:
                 'mp': DownloadTypeEnum.playlist,
                 'art': DownloadTypeEnum.artist
             }
-            return MediaIdentification(item_types[queries['id'].split('.')[0]], queries['id'])
+            return MediaIdentification(item_types[parameters['id'].split('.')[0]], parameters['id'])
         else:
             path_components = url_parsed.path.split('/')
             if 'track' in path_components:
@@ -81,12 +81,13 @@ class ModuleInterface:
 
         if query_type is DownloadTypeEnum.track:
             albums = self.session.get_items_dict('albums', [i['albumId'] for i in results])
-            results = [(i, albums[i['albumId']]) for i in results] # bundle with album info
+            results = [(i, albums[i['albumId']], ['HR'] if i.get('losslessFormats') and \
+                (i['losslessFormats'][0]['sampleBits'] > 16 or i['losslessFormats'][0]['sampleRate'] > 48000) else []) for i in results] # bundle with album info
         elif query_type is DownloadTypeEnum.playlist:
             members = self.session.get_string_from_items_list('members', [i['links']['members']['ids'][0] for i in results], string_key='screenName')
-            results = [(i, members[i['links']['members']['ids'][0]]) for i in results] # bundle with member name
+            results = [(i, members[i['links']['members']['ids'][0]], []) for i in results] # bundle with member name
         else:
-            results = [(i, {}) for i in results]
+            results = [(i, {}, []) for i in results]
 
         return [SearchResult(
                 result_id = i['id'],
@@ -95,21 +96,25 @@ class ModuleInterface:
                 year = (j if query_type is DownloadTypeEnum.track else i)['modified' if query_type is DownloadTypeEnum.playlist else 'released']\
                     .split('-')[0] if query_type is not DownloadTypeEnum.artist else None,
                 explicit = i.get('isExplicit'),
+                additional = k,
                 extra_kwargs = {'data': {i['id']: i}, 'album_data': j} if query_type is DownloadTypeEnum.track else \
                     {'data': {i['id']: i}, 'member_name': j} if query_type is DownloadTypeEnum.playlist else {'data': {i['id']: i}}
-            ) for i,j in results]
+            ) for i,j,k in results]
 
     def get_track_info(self, track_id, quality_tier: QualityEnum, codec_options: CodecOptions, data={}, album_data={}):
         track_data = data[track_id] if track_id in data else self.session.get_items_list('tracks', track_id)[0]
         if not album_data: album_data = self.session.get_items_list('albums', track_data['albumId'])[0]
         error = '' if track_data['isStreamable'] else 'Track is not streamable'
 
-        if (quality_tier is QualityEnum.LOSSLESS or quality_tier is QualityEnum.HIFI) and not self.tsc.read('hires_enabled'): quality_tier = QualityEnum.HIGH
-        requested_bitrate = self.quality_parse[quality_tier]
-        max_bitrate = self.tsc.read('max_bitrate')
-        if requested_bitrate > max_bitrate: requested_bitrate = max_bitrate
+        if self.module_controller.orpheus_options.disable_subscription_check:
+            requested_bitrate = -1
+        else:
+            if (quality_tier is QualityEnum.LOSSLESS or quality_tier is QualityEnum.HIFI) and not self.tsc.read('hires_enabled'): quality_tier = QualityEnum.HIGH
+            requested_bitrate = self.quality_parse[quality_tier]
+            max_bitrate = self.tsc.read('max_bitrate')
+            if requested_bitrate > max_bitrate: requested_bitrate = max_bitrate
 
-        if requested_bitrate == -1:
+        if requested_bitrate == -1 and track_data.get('losslessFormats'):
             bitrate = track_data['losslessFormats'][0]['bitrate']
             codec = track_data['losslessFormats'][0]['name']
             bit_depth = track_data['losslessFormats'][0]['sampleBits']

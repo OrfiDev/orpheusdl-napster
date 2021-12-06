@@ -115,6 +115,13 @@ Napster's main app:
 "requested_netloc": "napster"
 ```
 
+mora qualitas:
+```json
+"api_key": "Y2Q0YmU3ZGEtMDYyYy00YzAxLTliMzAtZTRiOTA0MzVlOWU3",
+"customer_secret": "ZDllNGE4YzMtNTBmMC00NGY4LTkzYTEtYmRiYmVhOGNjMjNk",
+"requested_netloc": "mora-qualitas"
+```
+
 <!-- Contact -->
 ## Contact
 

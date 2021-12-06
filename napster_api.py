@@ -75,18 +75,21 @@ class NapsterAPI:
         return self._get('search', params)['search']['data'][query_type+'s']
     
     def get_items_list(self, item_type, item_ids, item_sub='', item_string='', limit=50):
-        if isinstance(item_ids, list): item_ids = ','.join(item_ids)
-        r = self._get(f'{item_type}/{item_ids}' + (f'/{item_sub}' if item_sub else ''), {'limit': limit})
-        results = r[item_string if item_string else item_type] if item_ids else []
-        
-        requested, total = r['meta']['returnedCount'], r['meta']['totalCount']
-        if not total: total = 0
-        while requested < total:
-            r = self._get(f'{item_type}/{item_ids}' + (f'/{item_sub}' if item_sub else ''), {'limit': limit, 'offset': requested})
-            results += r[item_string if item_string else item_type] if item_ids else []
-            requested += r['meta']['returnedCount']
+        if item_ids:
+            if isinstance(item_ids, list): item_ids = ','.join(item_ids)
+            r = self._get(f'{item_type}/{item_ids}' + (f'/{item_sub}' if item_sub else ''), {'limit': limit})
+            results = r[item_string if item_string else item_type]
+            
+            requested, total = r['meta']['returnedCount'], r['meta']['totalCount']
+            if not total: total = 0
+            while requested < total:
+                r = self._get(f'{item_type}/{item_ids}' + (f'/{item_sub}' if item_sub else ''), {'limit': limit, 'offset': requested})
+                results += r[item_string if item_string else item_type] if item_ids else []
+                requested += r['meta']['returnedCount']
 
-        return results
+            return results
+        else:
+            return []
 
     def get_items_dict(self, item_type, item_ids, item_sub='', item_string='', limit=50):
         return {i['id']: i for i in self.get_items_list(item_type, item_ids, item_sub, item_string, limit)}
